@@ -2,11 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 import AssessmentResult from './AssessmentResult';
 
+// コスト計算用定数
+const STT_YEN_PER_SEC = 0.0417; // 音声認識（円/秒）
+const ADDON_YEN_PER_SEC = 0.0125; // 発音評価（円/秒）
+const STT_USD_PER_SEC = 0.000277; // 音声認識（ドル/秒）
+const ADDON_USD_PER_SEC = 0.0000833; // 発音評価（ドル/秒）
+
 interface SpeechRecognitionProps {
   isRecording: boolean;
   setIsRecording: (isRecording: boolean) => void;
   setFeedback: (feedback: string) => void;
   feedback: string;
+  referenceText?: string; // 原稿読み上げモード用の参照テキスト
+  onRecognizedWords?: (words: any[]) => void; // ScriptReading用
 }
 
 const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
@@ -14,6 +22,8 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
   setIsRecording,
   setFeedback,
   feedback,
+  referenceText,
+  onRecognizedWords
 }) => {
   const speechConfig = useRef<sdk.SpeechConfig | null>(null);
   const recognizer = useRef<sdk.SpeechRecognizer | null>(null);
@@ -31,6 +41,20 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
     words: [],
     assessment: null
   });
+  const [recordStart, setRecordStart] = useState<number | null>(null);
+  const [lastDuration, setLastDuration] = useState<number>(0); // 直近の録音秒数
+  const [totalDuration, setTotalDuration] = useState<number>(0); // 累計録音秒数
+  const [showCost, setShowCost] = useState(false);
+  const [costInfo, setCostInfo] = useState<{
+    stt: number;
+    addon: number;
+    sttUsd: number;
+    addonUsd: number;
+    total: number;
+    totalUsd: number;
+    last: number;
+    lastUsd: number;
+  } | null>(null);
 
   useEffect(() => {
     const initializeSpeech = async () => {
@@ -50,9 +74,8 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         speechConfig.current.outputFormat = sdk.OutputFormat.Detailed;
 
         // 発音評価の設定
-        const referenceText = "";  // フリートークモード用に空文字列
         const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
-          referenceText,
+          referenceText || "",
           sdk.PronunciationAssessmentGradingSystem.HundredMark,
           sdk.PronunciationAssessmentGranularity.Phoneme,
           true  // 詳細な評価を有効化
@@ -156,16 +179,17 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
     }
 
     try {
-      // セッションをリセット
       setCurrentSession({
         text: '',
         words: [],
         assessment: null
       });
+      setRecordStart(Date.now()); // 録音開始時刻を記録
+      setShowCost(false); // コスト表示を一旦非表示
       await recognizer.current?.startContinuousRecognitionAsync();
       setIsRecording(true);
       setError(null);
-      setRecognizingText('');  // 録音開始時にクリア
+      setRecognizingText('');
       showToast('録音を開始しました');
     } catch (error) {
       setError(`録音開始エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
@@ -178,6 +202,34 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
       await recognizer.current?.stopContinuousRecognitionAsync();
       setIsRecording(false);
       showToast('録音を停止しました');
+      // 録音時間を計算
+      if (recordStart) {
+        const durationSec = (Date.now() - recordStart) / 1000;
+        setLastDuration(durationSec);
+        setTotalDuration(prev => prev + durationSec);
+        setRecordStart(null);
+
+        // コスト計算
+        const stt = durationSec * STT_YEN_PER_SEC;
+        const addon = durationSec * ADDON_YEN_PER_SEC;
+        const sttUsd = durationSec * STT_USD_PER_SEC;
+        const addonUsd = durationSec * ADDON_USD_PER_SEC;
+        const total = (totalDuration + durationSec) * (STT_YEN_PER_SEC + ADDON_YEN_PER_SEC);
+        const totalUsd = (totalDuration + durationSec) * (STT_USD_PER_SEC + ADDON_USD_PER_SEC);
+        setCostInfo({
+          stt,
+          addon,
+          sttUsd,
+          addonUsd,
+          total,
+          totalUsd,
+          last: stt + addon,
+          lastUsd: sttUsd + addonUsd
+        });
+        setShowCost(true);
+        // 5秒後に自動で非表示
+        setTimeout(() => setShowCost(false), 5000);
+      }
     } catch (error) {
       setError(`録音停止エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
       showToast('録音停止に失敗しました');
@@ -237,6 +289,25 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
 
       {assessmentResult && (
         <AssessmentResult result={assessmentResult} />
+      )}
+
+      {/* 開発者向けコスト表示 */}
+      {showCost && costInfo && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border border-blue-300 shadow-lg px-6 py-4 rounded-lg z-50 text-left text-sm animate-fadeIn">
+          <div className="font-bold text-blue-700 mb-1">開発者向けAPIコスト明細</div>
+          <div className="mb-1">今回の録音: <span className="font-mono">{lastDuration.toFixed(2)}秒</span></div>
+          <ul className="mb-2">
+            <li>音声認識: <span className="font-mono">¥{costInfo.stt.toFixed(3)}</span> / <span className="font-mono">${costInfo.sttUsd.toFixed(4)}</span></li>
+            <li>発音評価: <span className="font-mono">¥{costInfo.addon.toFixed(3)}</span> / <span className="font-mono">${costInfo.addonUsd.toFixed(4)}</span></li>
+            <li className="font-bold">合計: <span className="font-mono">¥{costInfo.last.toFixed(3)}</span> / <span className="font-mono">${costInfo.lastUsd.toFixed(4)}</span></li>
+          </ul>
+          <div className="text-xs text-gray-500 mb-1">累計（このセッション）</div>
+          <ul>
+            <li>音声認識: <span className="font-mono">{(totalDuration * STT_YEN_PER_SEC).toFixed(3)}</span>円</li>
+            <li>発音評価: <span className="font-mono">{(totalDuration * ADDON_YEN_PER_SEC).toFixed(3)}</span>円</li>
+            <li className="font-bold">合計: <span className="font-mono">{costInfo.total.toFixed(3)}</span>円 / <span className="font-mono">${costInfo.totalUsd.toFixed(4)}</span></li>
+          </ul>
+        </div>
       )}
     </div>
   );
