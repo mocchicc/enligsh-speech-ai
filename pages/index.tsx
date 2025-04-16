@@ -2,11 +2,12 @@ import { useState } from 'react';
 import Head from 'next/head';
 import SpeechRecognition from '../components/SpeechRecognition';
 import ScriptReading from '../components/ScriptReading';
+import WordCardGame from '../components/WordCardGame';
 
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const [mode, setMode] = useState<'free-talk' | 'script-reading'>('free-talk');
+  const [mode, setMode] = useState<'free-talk' | 'script-reading' | 'word-card'>('free-talk');
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -26,13 +27,22 @@ export default function Home() {
                   Free Talk Mode
                   <span className="block text-sm text-gray-500">フリートークモード</span>
                 </h2>
-                <button
-                  onClick={() => setMode('script-reading')}
-                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                >
-                  Switch to Script Reading
-                  <span className="block text-xs">原稿読み上げモードへ</span>
-                </button>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setMode('script-reading')}
+                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                  >
+                    Switch to Script Reading
+                    <span className="block text-xs">原稿読み上げモードへ</span>
+                  </button>
+                  <button
+                    onClick={() => setMode('word-card')}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                  >
+                    Switch to Word Card Game
+                    <span className="block text-xs">単語カードゲームへ</span>
+                  </button>
+                </div>
               </div>
 
               <SpeechRecognition
@@ -42,11 +52,13 @@ export default function Home() {
                 feedback={feedback}
               />
             </>
-          ) : (
+          ) : mode === 'script-reading' ? (
             <ScriptReading onModeChange={() => setMode('free-talk')} />
+          ) : (
+            <WordCardGame />
           )}
 
-          {feedback && (
+          {feedback && mode === 'free-talk' && (
             <div className="mt-6 p-4 bg-gray-50 rounded">
               <h3 className="font-semibold mb-2">フィードバック</h3>
               <p>{feedback}</p>

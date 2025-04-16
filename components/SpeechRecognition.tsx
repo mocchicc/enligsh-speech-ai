@@ -15,6 +15,9 @@ interface SpeechRecognitionProps {
   feedback: string;
   referenceText?: string; // 原稿読み上げモード用の参照テキスト
   onRecognizedWords?: (words: any[]) => void; // ScriptReading用
+  onResult?: (score: number) => void; // 発音スコアを親コンポーネントに渡す
+  onSpeakingStart?: () => void; // 発話開始時のコールバック
+  onSpeakingEnd?: () => void; // 発話終了時のコールバック
 }
 
 const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
@@ -23,7 +26,10 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
   setFeedback,
   feedback,
   referenceText,
-  onRecognizedWords
+  onRecognizedWords,
+  onResult,
+  onSpeakingStart,
+  onSpeakingEnd
 }) => {
   const speechConfig = useRef<sdk.SpeechConfig | null>(null);
   const recognizer = useRef<sdk.SpeechRecognizer | null>(null);
@@ -45,6 +51,8 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
   const [lastDuration, setLastDuration] = useState<number>(0); // 直近の録音秒数
   const [totalDuration, setTotalDuration] = useState<number>(0); // 累計録音秒数
   const [showCost, setShowCost] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const lastRecognitionRef = useRef<number>(0);
   const [costInfo, setCostInfo] = useState<{
     stt: number;
     addon: number;
@@ -55,6 +63,11 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
     last: number;
     lastUsd: number;
   } | null>(null);
+
+  // 前回の認識テキスト
+  const lastRecognitionTextRef = useRef<string>('');
+  // 認識テキストのタイムスタンプ
+  const lastRecognitionTimeRef = useRef<number>(0);
 
   useEffect(() => {
     const initializeSpeech = async () => {
@@ -77,13 +90,9 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
           referenceText || "",  // 原稿読み上げモードの場合は参照テキストを使用
           sdk.PronunciationAssessmentGradingSystem.HundredMark,
-          sdk.PronunciationAssessmentGranularity.Phoneme, // 音素レベルの詳細な評価を有効化
+          sdk.PronunciationAssessmentGranularity.Phoneme,
           true
         );
-        
-        // 詳細な音素情報の取得を有効化
-        pronunciationAssessmentConfig.enableProsodyAssessment = true; // プロソディ（抑揚やアクセント）の評価を有効化
-        pronunciationAssessmentConfig.enableMiscue = true; // 発音の誤りの詳細検出を有効化
 
         // 音声認識オブジェクトの作成
         recognizer.current = new sdk.SpeechRecognizer(speechConfig.current);
@@ -91,122 +100,140 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         // 発音評価を音声認識に適用
         pronunciationAssessmentConfig.applyTo(recognizer.current);
 
-        recognizer.current.recognized = (s, e) => {
-          if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
-            const result = JSON.parse(e.result.json);
-            console.log('Recognition result:', result);  // デバッグ用
-            const nBest = result.NBest?.[0];
+        // 認識中イベント - 発話開始の検知
+        recognizer.current.recognizing = (s, e) => {
+          console.log('[DEBUG] Recognizing:', e.result.text);
+          
+          // 現在のセッションのテキストに一時的な認識テキストを追加
+          setRecognizingText(currentSession.text + ' ' + e.result.text);
+          
+          // テキストがあり、直前の発話から一定時間経過している場合に発話開始と判断
+          if (e.result.text.trim() !== '' && !isSpeaking) {
+            console.log('[DEBUG] 発話開始を検知:', e.result.text);
+            setIsSpeaking(true);
             
-            // 詳細な発音情報の取得
-            if (nBest && nBest.Words) {
-              // 各単語の詳細な発音情報を取得
-              nBest.Words.forEach((word: any) => {
-                // PronunciationAssessmentの情報を詳細に記録
-                if (word.PronunciationAssessment) {
-                  // 音素レベルの情報を取得
-                  const phonemeInfo = word.Phonemes || [];
-                  const errorType = word.PronunciationAssessment.ErrorType || '';
-                  
-                  // アクセント情報（プロソディ）
-                  const prosody = word.Prosody || {};
-                  
-                  // 音素とアクセント情報をコンソールに出力（デバッグ用）
-                  if (phonemeInfo.length > 0 || Object.keys(prosody).length > 0 || errorType) {
-                    console.log(`単語: ${word.Word} の詳細情報:`, {
-                      errorType,
-                      phonemes: phonemeInfo,
-                      prosody
-                    });
-                  }
-                  
-                  // 単語オブジェクトに発音の詳細情報を追加
-                  word.phoneticDetails = {
-                    errorType,
-                    phonemes: phonemeInfo,
-                    prosody
-                  };
-                }
-              });
+            if (onSpeakingStart) {
+              onSpeakingStart();
             }
             
-            if (nBest) {
-              // 現在のセッションに新しい認識結果を追加
-              setCurrentSession(prev => {
-                const newText = prev.text + ' ' + (nBest.Display || '');
-                const newWords = [...prev.words, ...(nBest.Words || [])];
-                
-                // ScriptReading用: 単語配列を親に渡す
-                if (onRecognizedWords) {
-                  onRecognizedWords(newWords);
-                }
-
-                // 新しい評価結果を生成
-                const combinedResult = {
-                  ...result,
-                  NBest: [{
-                    ...nBest,
-                    Display: newText.trim(),
-                    Words: newWords,
-                    PronunciationAssessment: nBest.PronunciationAssessment
-                  }]
-                };
-
-                setAssessmentResult(combinedResult);
-
-                return {
-                  text: newText.trim(),
-                  words: newWords,
-                  assessment: nBest.PronunciationAssessment
-                };
-              });
-
-              // フィードバックの更新
-              const confidence = nBest.Confidence || 0;
-              let feedback = `認識されたテキスト: ${currentSession.text}\n`;
-              feedback += `信頼度: ${(confidence * 100).toFixed(2)}%\n`;
-              
-              if (nBest.PronunciationAssessment) {
-                const assessment = nBest.PronunciationAssessment;
-                console.log('Pronunciation assessment:', assessment);  // デバッグ用
-                feedback += `発音スコア: ${assessment.AccuracyScore}\n`;
-                feedback += `流暢さ: ${assessment.FluencyScore}\n`;
-                feedback += `完全性: ${assessment.CompletenessScore}`;
-                
-                // 発音の詳細エラーがあれば表示
-                const errorWords = nBest.Words?.filter((w: any) => 
-                  w.PronunciationAssessment?.ErrorType || 
-                  (w.PronunciationAssessment?.AccuracyScore && w.PronunciationAssessment.AccuracyScore < 70)
-                );
-                
-                if (errorWords && errorWords.length > 0) {
-                  feedback += `\n\n発音エラーの詳細:\n`;
-                  errorWords.forEach((word: any, idx: number) => {
-                    if (idx < 3) { // 最初の3つだけ表示
-                      feedback += `- "${word.Word}": ${word.PronunciationAssessment.ErrorType || '不正確な発音'}\n`;
-                    }
-                  });
-                  if (errorWords.length > 3) {
-                    feedback += `... 他 ${errorWords.length - 3} 箇所\n`;
-                  }
-                }
-              }
-              
-              setFeedback(feedback);
-            }
+            lastRecognitionRef.current = Date.now();
+          } else if (e.result.text.trim() !== '') {
+            // 発話継続中の更新
+            lastRecognitionRef.current = Date.now();
           }
         };
 
-        // 認識開始イベントを追加
-        recognizer.current.recognizing = (s, e) => {
-          console.log('Recognizing:', e.result.text);  // デバッグ用
-          // 現在のセッションのテキストに一時的な認識テキストを追加
-          setRecognizingText(currentSession.text + ' ' + e.result.text);
+        // 認識完了イベント - 発音評価と発話終了の検知
+        recognizer.current.recognized = (s, e) => {
+          if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
+            console.log('[DEBUG] 認識完了:', e.result.text);
+            
+            try {
+              const result = JSON.parse(e.result.json);
+              console.log('[DEBUG] 認識結果詳細:', result);
+              const nBest = result.NBest?.[0];
+              
+              if (nBest) {
+                // 前回と同じテキストの場合は処理しない（重複防止）
+                // 前回認識から1秒以上経過していれば、同じテキストでも処理する
+                const now = Date.now();
+                const isDuplicate = lastRecognitionTextRef.current === nBest.Display && 
+                                   (now - lastRecognitionTimeRef.current) < 1000;
+                
+                if (isDuplicate) {
+                  console.log('[DEBUG] 重複認識をスキップ（同じテキスト、' + 
+                             ((now - lastRecognitionTimeRef.current) / 1000).toFixed(1) + '秒以内）');
+                  return;
+                }
+                
+                lastRecognitionTextRef.current = nBest.Display || '';
+                lastRecognitionTimeRef.current = now;
+                
+                // 現在のセッションに新しい認識結果を追加
+                setCurrentSession(prev => {
+                  const newText = prev.text + ' ' + (nBest.Display || '');
+                  const newWords = [...prev.words, ...(nBest.Words || [])];
+                  
+                  // ScriptReading用: 単語配列を親に渡す
+                  if (onRecognizedWords) {
+                    onRecognizedWords(newWords);
+                  }
+
+                  // 新しい評価結果を生成
+                  const combinedResult = {
+                    ...result,
+                    NBest: [{
+                      ...nBest,
+                      Display: newText.trim(),
+                      Words: newWords,
+                      PronunciationAssessment: nBest.PronunciationAssessment
+                    }]
+                  };
+
+                  setAssessmentResult(combinedResult);
+
+                  return {
+                    text: newText.trim(),
+                    words: newWords,
+                    assessment: nBest.PronunciationAssessment
+                  };
+                });
+
+                // フィードバックの更新
+                const confidence = nBest.Confidence || 0;
+                let feedback = `認識されたテキスト: ${nBest.Display || ''}\n`;
+                feedback += `信頼度: ${(confidence * 100).toFixed(2)}%\n`;
+                
+                if (nBest.PronunciationAssessment) {
+                  const assessment = nBest.PronunciationAssessment;
+                  console.log('[DEBUG] 発音評価:', assessment);
+                  feedback += `発音スコア: ${assessment.AccuracyScore}\n`;
+                  feedback += `流暢さ: ${assessment.FluencyScore}\n`;
+                  feedback += `完全性: ${assessment.CompletenessScore}`;
+                  
+                  // 発音スコアを親コンポーネントに渡す
+                  if (onResult) {
+                    console.log('[DEBUG] 発音スコア送信:', assessment.AccuracyScore / 100);
+                    onResult(assessment.AccuracyScore / 100); // 0-1の範囲に正規化
+                  }
+                }
+                
+                setFeedback(feedback);
+              }
+            } catch (error) {
+              console.error('[ERROR] JSON解析エラー:', error);
+              setError(`認識結果の解析に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+            }
+            
+            // 発話が終了したと判断（認識が完了した時点）
+            if (isSpeaking) {
+              console.log('[DEBUG] 発話終了を検知');
+              setIsSpeaking(false);
+              
+              if (onSpeakingEnd) {
+                onSpeakingEnd();
+              }
+            }
+          } else {
+            console.log('[DEBUG] 認識なし:', e.result.reason);
+          }
         };
 
         recognizer.current.canceled = (s, e) => {
-          console.log('Recognition canceled:', e);  // デバッグ用
+          console.log('[DEBUG] 認識キャンセル:', e);
           if (e.reason === sdk.CancellationReason.Error) {
             setError(`エラーが発生しました: ${e.errorDetails}`);
+          }
+        };
+
+        recognizer.current.sessionStopped = (s, e) => {
+          console.log('[DEBUG] セッション停止');
+          // 発話が終了したと判断
+          if (isSpeaking) {
+            setIsSpeaking(false);
+            if (onSpeakingEnd) {
+              onSpeakingEnd();
+            }
           }
         };
 
@@ -224,6 +251,17 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
       }
     };
   }, [referenceText]); // referenceTextが変更されたら再初期化
+
+  // isRecordingの変更を監視して、自動的に録音開始/停止
+  useEffect(() => {
+    if (isInitialized) {
+      if (isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    }
+  }, [isRecording, isInitialized]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -243,14 +281,18 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         words: [],
         assessment: null
       });
+      // 録音開始時に前回の認識テキスト情報をリセット
+      lastRecognitionTextRef.current = '';
+      lastRecognitionTimeRef.current = 0;
       setRecordStart(Date.now()); // 録音開始時刻を記録
       setShowCost(false); // コスト表示を一旦非表示
+      console.log('[DEBUG] 録音開始');
       await recognizer.current?.startContinuousRecognitionAsync();
-      setIsRecording(true);
       setError(null);
       setRecognizingText('');
       showToast('録音を開始しました');
     } catch (error) {
+      console.error('[ERROR] 録音開始エラー:', error);
       setError(`録音開始エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
       showToast('録音開始に失敗しました');
     }
@@ -258,8 +300,8 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
 
   const stopRecording = async () => {
     try {
+      console.log('[DEBUG] 録音停止');
       await recognizer.current?.stopContinuousRecognitionAsync();
-      setIsRecording(false);
       showToast('録音を停止しました');
       // 録音時間を計算
       if (recordStart) {
@@ -288,6 +330,7 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         setShowCost(true);
       }
     } catch (error) {
+      console.error('[ERROR] 録音停止エラー:', error);
       setError(`録音停止エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
       showToast('録音停止に失敗しました');
     }
@@ -302,7 +345,7 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
       )}
       
       <button
-        onClick={isRecording ? stopRecording : startRecording}
+        onClick={() => setIsRecording(!isRecording)}
         className={`px-6 py-3 rounded-full text-white font-semibold ${
           isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
         }`}
