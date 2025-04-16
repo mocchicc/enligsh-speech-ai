@@ -75,11 +75,7 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
 
         // 発音評価の設定
         const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
-<<<<<<< HEAD
-          referenceText || "",
-=======
           referenceText || "",  // 原稿読み上げモードの場合は参照テキストを使用
->>>>>>> feat/script-reading
           sdk.PronunciationAssessmentGradingSystem.HundredMark,
           sdk.PronunciationAssessmentGranularity.Phoneme,
           true
@@ -236,8 +232,6 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
           lastUsd: sttUsd + addonUsd
         });
         setShowCost(true);
-        // 5秒後に自動で非表示
-        setTimeout(() => setShowCost(false), 5000);
       }
     } catch (error) {
       setError(`録音停止エラー: ${error instanceof Error ? error.message : '不明なエラー'}`);
@@ -302,8 +296,16 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
 
       {/* 開発者向けコスト表示 */}
       {showCost && costInfo && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border border-blue-300 shadow-lg px-6 py-4 rounded-lg z-50 text-left text-sm animate-fadeIn">
-          <div className="font-bold text-blue-700 mb-1">開発者向けAPIコスト明細</div>
+        <div className="fixed top-4 right-4 bg-white border border-blue-300 shadow-lg px-6 py-4 rounded-lg z-50 text-left text-sm animate-fadeIn">
+          <div className="flex justify-between items-center mb-2">
+            <div className="font-bold text-blue-700">開発者向けAPIコスト明細</div>
+            <button
+              onClick={() => setShowCost(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
           <div className="mb-1">今回の録音: <span className="font-mono">{lastDuration.toFixed(2)}秒</span></div>
           <ul className="mb-2">
             <li>音声認識: <span className="font-mono">¥{costInfo.stt.toFixed(3)}</span> / <span className="font-mono">${costInfo.sttUsd.toFixed(4)}</span></li>

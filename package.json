@@ -1,0 +1,25 @@
+{
+  "name": "speech-test",
+  "version": "1.0.0",
+  "description": "English pronunciation evaluation system using Azure Speech API",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.35.0",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.35",
+    "autoprefixer": "^10.4.17"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.55",
+    "@types/node": "^20.11.19",
+    "typescript": "^5.3.3"
+  }
+} 
