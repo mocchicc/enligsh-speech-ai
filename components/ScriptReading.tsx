@@ -32,11 +32,13 @@ const ScriptHighlight: React.FC<{
         let showScore = false;
         let score = 0;
         let errorType = '';
+        let phoneticDetails = null;
 
         if (recognized && recognized.Word && word.replace(/[^a-zA-Z0-9']/g, '').toLowerCase() === recognized.Word.replace(/[^a-zA-Z0-9']/g, '').toLowerCase()) {
           // 発話済み
           score = recognized.PronunciationAssessment?.AccuracyScore ?? 100;
           errorType = recognized.PronunciationAssessment?.ErrorType ?? '';
+          phoneticDetails = recognized.phoneticDetails || null;
           showScore = true;
           if (score >= 80) colorClass = 'bg-green-100 text-green-800';
           else if (score >= 60) colorClass = 'bg-yellow-100 text-yellow-800';
@@ -47,11 +49,43 @@ const ScriptHighlight: React.FC<{
           // 現在認識中の単語
           colorClass = 'bg-blue-100 text-blue-800 underline underline-offset-4';
         }
+        
+        // 発音エラーがある場合のツールチップ内容
+        let tooltipContent = '';
+        if (phoneticDetails && (errorType || score < 70)) {
+          tooltipContent = `期待: /${word}/ ${phoneticDetails.phonemes?.map((p: any) => p.Phoneme).join('')}`;
+          if (errorType) {
+            tooltipContent += `\nエラー: ${errorType === 'Mispronunciation' ? '発音の誤り' : 
+              errorType === 'Omission' ? '脱落' : 
+              errorType === 'Insertion' ? '余分な音' : errorType}`;
+          }
+          if (phoneticDetails.prosody && Object.keys(phoneticDetails.prosody).length > 0) {
+            tooltipContent += '\nアクセント: ';
+            if (phoneticDetails.prosody.Stress) {
+              tooltipContent += phoneticDetails.prosody.Stress === 'Wrong' ? '不正確' : '正確';
+            }
+          }
+        }
+        
         return (
-          <span key={idx} className={`px-2 py-1 rounded ${colorClass} ${borderClass} transition-colors duration-200`}>
+          <span 
+            key={idx} 
+            className={`px-2 py-1 rounded ${colorClass} ${borderClass} transition-colors duration-200 relative group`}
+            title={tooltipContent || undefined}
+          >
             {word}
             {showScore && (
-              <span className="ml-1 text-xs text-gray-500">{score.toFixed(0)}</span>
+              <>
+                <span className="ml-1 text-xs text-gray-500">{score.toFixed(0)}</span>
+                {(errorType || (score < 70 && phoneticDetails)) && (
+                  <span className="absolute bottom-0 left-0 w-full h-0.5 bg-red-400"></span>
+                )}
+              </>
+            )}
+            {tooltipContent && (
+              <div className="hidden group-hover:block absolute -bottom-20 left-0 bg-gray-900 text-white text-xs p-2 rounded z-50 whitespace-pre-wrap min-w-[200px] shadow-lg">
+                {tooltipContent}
+              </div>
             )}
           </span>
         );

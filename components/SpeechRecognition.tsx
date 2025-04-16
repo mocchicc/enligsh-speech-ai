@@ -77,9 +77,13 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
           referenceText || "",  // 原稿読み上げモードの場合は参照テキストを使用
           sdk.PronunciationAssessmentGradingSystem.HundredMark,
-          sdk.PronunciationAssessmentGranularity.Phoneme,
+          sdk.PronunciationAssessmentGranularity.Phoneme, // 音素レベルの詳細な評価を有効化
           true
         );
+        
+        // 詳細な音素情報の取得を有効化
+        pronunciationAssessmentConfig.enableProsodyAssessment = true; // プロソディ（抑揚やアクセント）の評価を有効化
+        pronunciationAssessmentConfig.enableMiscue = true; // 発音の誤りの詳細検出を有効化
 
         // 音声認識オブジェクトの作成
         recognizer.current = new sdk.SpeechRecognizer(speechConfig.current);
@@ -92,6 +96,38 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
             const result = JSON.parse(e.result.json);
             console.log('Recognition result:', result);  // デバッグ用
             const nBest = result.NBest?.[0];
+            
+            // 詳細な発音情報の取得
+            if (nBest && nBest.Words) {
+              // 各単語の詳細な発音情報を取得
+              nBest.Words.forEach((word: any) => {
+                // PronunciationAssessmentの情報を詳細に記録
+                if (word.PronunciationAssessment) {
+                  // 音素レベルの情報を取得
+                  const phonemeInfo = word.Phonemes || [];
+                  const errorType = word.PronunciationAssessment.ErrorType || '';
+                  
+                  // アクセント情報（プロソディ）
+                  const prosody = word.Prosody || {};
+                  
+                  // 音素とアクセント情報をコンソールに出力（デバッグ用）
+                  if (phonemeInfo.length > 0 || Object.keys(prosody).length > 0 || errorType) {
+                    console.log(`単語: ${word.Word} の詳細情報:`, {
+                      errorType,
+                      phonemes: phonemeInfo,
+                      prosody
+                    });
+                  }
+                  
+                  // 単語オブジェクトに発音の詳細情報を追加
+                  word.phoneticDetails = {
+                    errorType,
+                    phonemes: phonemeInfo,
+                    prosody
+                  };
+                }
+              });
+            }
             
             if (nBest) {
               // 現在のセッションに新しい認識結果を追加
@@ -135,6 +171,24 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
                 feedback += `発音スコア: ${assessment.AccuracyScore}\n`;
                 feedback += `流暢さ: ${assessment.FluencyScore}\n`;
                 feedback += `完全性: ${assessment.CompletenessScore}`;
+                
+                // 発音の詳細エラーがあれば表示
+                const errorWords = nBest.Words?.filter((w: any) => 
+                  w.PronunciationAssessment?.ErrorType || 
+                  (w.PronunciationAssessment?.AccuracyScore && w.PronunciationAssessment.AccuracyScore < 70)
+                );
+                
+                if (errorWords && errorWords.length > 0) {
+                  feedback += `\n\n発音エラーの詳細:\n`;
+                  errorWords.forEach((word: any, idx: number) => {
+                    if (idx < 3) { // 最初の3つだけ表示
+                      feedback += `- "${word.Word}": ${word.PronunciationAssessment.ErrorType || '不正確な発音'}\n`;
+                    }
+                  });
+                  if (errorWords.length > 3) {
+                    feedback += `... 他 ${errorWords.length - 3} 箇所\n`;
+                  }
+                }
               }
               
               setFeedback(feedback);

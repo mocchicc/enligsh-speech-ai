@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import HighlightedText from './HighlightedText';
 
 interface AssessmentResultProps {
@@ -6,6 +6,8 @@ interface AssessmentResultProps {
 }
 
 const AssessmentResult: React.FC<AssessmentResultProps> = ({ result }) => {
+  const [showPhoneticDetails, setShowPhoneticDetails] = useState(false);
+  
   if (!result) return null;
   console.log('AssessmentResult received:', result);  // デバッグ用
 
@@ -24,6 +26,12 @@ const AssessmentResult: React.FC<AssessmentResultProps> = ({ result }) => {
 
   // 単語ごとの評価情報を取得
   const words = nBest.Words || [];
+  
+  // 発音エラーのある単語を抽出
+  const wordsWithErrors = words.filter((word: any) => 
+    (word.PronunciationAssessment?.ErrorType || 
+    (word.PronunciationAssessment?.AccuracyScore && word.PronunciationAssessment.AccuracyScore < 70))
+  );
 
   return (
     <div className="mt-8 p-6 bg-white rounded-lg shadow-md">
@@ -115,6 +123,70 @@ const AssessmentResult: React.FC<AssessmentResultProps> = ({ result }) => {
           </ul>
         </div>
       </div>
+      
+      {/* 発音詳細情報 */}
+      {wordsWithErrors.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">
+              Pronunciation Errors
+              <span className="text-sm text-gray-500 ml-2">発音エラー</span>
+            </h4>
+            <button
+              className="text-sm text-blue-500 hover:underline"
+              onClick={() => setShowPhoneticDetails(!showPhoneticDetails)}
+            >
+              {showPhoneticDetails ? '詳細を隠す' : '詳細を表示'}
+            </button>
+          </div>
+          <div className="mt-2 bg-red-50 p-4 rounded">
+            {wordsWithErrors.length > 0 ? (
+              <ul className="space-y-2 divide-y divide-red-100">
+                {wordsWithErrors.map((word: any, idx: number) => (
+                  <li key={idx} className="pt-2 first:pt-0">
+                    <div className="font-medium">
+                      {word.Word} 
+                      <span className="ml-2 text-sm text-gray-500">
+                        スコア: {word.PronunciationAssessment?.AccuracyScore?.toFixed(1) || 'N/A'}
+                      </span>
+                    </div>
+                    {word.PronunciationAssessment?.ErrorType && (
+                      <div className="text-sm text-red-600">
+                        エラータイプ: {
+                          word.PronunciationAssessment.ErrorType === 'Mispronunciation' ? '発音の誤り' : 
+                          word.PronunciationAssessment.ErrorType === 'Omission' ? '脱落' : 
+                          word.PronunciationAssessment.ErrorType === 'Insertion' ? '余分な音' : 
+                          word.PronunciationAssessment.ErrorType
+                        }
+                      </div>
+                    )}
+                    {showPhoneticDetails && word.phoneticDetails && (
+                      <div className="mt-1 text-sm">
+                        {word.phoneticDetails.phonemes && word.phoneticDetails.phonemes.length > 0 && (
+                          <div className="text-gray-600">
+                            音素: {word.phoneticDetails.phonemes.map((p: any) => p.Phoneme).join(' ')}
+                          </div>
+                        )}
+                        {word.phoneticDetails.prosody && Object.keys(word.phoneticDetails.prosody).length > 0 && (
+                          <div className="text-gray-600">
+                            アクセント: {
+                              word.phoneticDetails.prosody.Stress === 'Wrong' ? '不正確' : 
+                              word.phoneticDetails.prosody.Stress === 'Correct' ? '正確' : 
+                              '情報なし'
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">発音エラーはありません。</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
