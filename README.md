@@ -1,42 +1,90 @@
-# 英語発音評価システム
+# English Pronunciation Assessment System
 
-Azure Speech APIを使用した英語発音評価システムです。中学生向けに、フリートークや原稿読み上げを通じて発音のフィードバックを提供します。
+A web application for English pronunciation assessment using Azure Speech API. This system helps non-native English speakers improve their pronunciation skills through free conversation and script reading exercises.
 
-## 機能
+## Features
 
-- フリートークモード
-- 原稿読み上げモード
-- リアルタイム音声認識
-- 発音フィードバック
+- **Two Practice Modes**:
+  - Free Talk: Practice spontaneous conversation
+  - Script Reading: Read pre-defined scripts with different difficulty levels
+- **Real-time Speech Recognition**: Instant feedback on your spoken English
+- **Pronunciation Assessment**:
+  - Word-level accuracy scoring
+  - Detailed pronunciation feedback
+  - Pause analysis for natural speech rhythm
+- **Multilingual Interface**: Instructions in both English and Japanese
+- **TTS (Text-to-Speech)**: Listen to correct pronunciation of scripts
 
-## セットアップ
+## Technology Stack
 
-1. 必要なパッケージのインストール:
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Azure Cognitive Services Speech SDK
+
+## Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/mocchicc/enligsh-speech-ai.git
+cd enligsh-speech-ai
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-2. 環境変数の設定:
-`.env.local`ファイルを作成し、以下の情報を設定してください：
+3. Configure environment variables:
+Create a `.env.local` file with the following content:
 ```
 NEXT_PUBLIC_AZURE_SPEECH_KEY=your_azure_speech_key_here
 NEXT_PUBLIC_AZURE_SPEECH_REGION=your_azure_region_here
 ```
 
-3. 開発サーバーの起動:
+4. Start the development server:
 ```bash
 npm run dev
 ```
 
-## 使用方法
+5. Open your browser and navigate to `http://localhost:3000`
 
-1. ブラウザで `http://localhost:3000` にアクセス
-2. 練習モード（フリートークまたは原稿読み上げ）を選択
-3. 「録音開始」ボタンをクリックして話し始める
-4. 録音を停止すると、認識されたテキストとフィードバックが表示されます
+## Usage Instructions
 
-## 注意事項
+### Free Talk Mode
+1. Click the "Start Recording" button
+2. Speak freely in English
+3. Stop recording to see the transcription and pronunciation feedback
+4. Review word-level pronunciation scores and suggestions
 
-- Azure Speech APIの利用には有効なサブスクリプションキーが必要です
-- ブラウザのマイクアクセスを許可する必要があります
-- 推奨ブラウザ: Chrome, Edge, Firefox 
+### Script Reading Mode
+1. Select a script from the list (beginner, pre-intermediate, intermediate, or advanced)
+2. Listen to the correct pronunciation (optional)
+3. Click "Start Recording" and read the script
+4. Get detailed feedback on your pronunciation accuracy
+5. Practice focusing on highlighted problem areas
+
+## Notes
+
+- A valid Azure Speech API subscription key is required
+- Browser microphone access permission is necessary
+- Recommended browsers: Chrome, Edge, Firefox
+- Internet connection is required for API communication
+
+## Future Enhancements
+
+- User accounts for progress tracking
+- More script categories and difficulty levels
+- Customizable practice sessions
+- Downloadable pronunciation reports
+- Mobile application support
+
+## License
+
+This project is open source and available under the MIT License.
+
+## Acknowledgements
+
+- Microsoft Azure for Speech Services
+- Next.js team for the React framework
+- All contributors and testers who helped improve this application 
