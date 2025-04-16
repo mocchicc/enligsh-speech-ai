@@ -38,18 +38,19 @@ const CARD_ANIMATION = {
   SUCCESS: 'fade-zoom',  // 成功アニメーション（バウンスからフェードズームに変更）
   FADE_OUT: 'fade-out',  // フェードアウト
   FADE_IN: 'fade-in',    // フェードイン
-  FINAL_FADE_OUT: 'final-fade-out'  // 追加：最後のフェードアウト
+  FINAL_FADE_OUT: 'final-fade-out',  // 最後のフェードアウト
+  PERFECT: 'perfect'     // 100点満点時の演出
 };
 
 // アニメーション時間の定数化（ミリ秒）
 const ANIMATION_TIMING = {
-  SUCCESS: 200,      // 成功アニメーション時間（バウンスからフェードズームに変更、800→500に短縮）
-  FADE_OUT: 500,     // フェードアウト時間
-  FADE_IN: 300,      // フェードイン時間
-  NEXT_CARD: 300,    // 次のカードへの移行時間
-  WAIT_BEFORE_ANIMATION: 0,  // 成功から成功アニメーション開始までの待機時間（さらに短縮）
-  SOUND_COMPLETE: 200,  // 追加：効果音の完了を待つ時間
-  FINAL_FADE: 1000       // 追加：最後のフェードアウト時間
+  SUCCESS: 100,      // 成功アニメーション時間（150ms→100msに短縮）
+  FADE_OUT: 180,     // フェードアウト時間（300ms→180msに短縮）
+  FADE_IN: 120,      // フェードイン時間（200ms→120msに短縮）
+  NEXT_CARD: 120,    // 次のカードへの移行時間（200ms→120msに短縮）
+  WAIT_BEFORE_ANIMATION: 0,  // 成功から成功アニメーション開始までの待機時間
+  SOUND_COMPLETE: 50,   // 効果音の完了を待つ時間（100ms→50msに短縮）
+  FINAL_FADE: 800      // 最後のフェードアウト時間（800ms→750msに短縮）
 };
 
 // 効果音パス
@@ -76,6 +77,15 @@ const GAME_EVENT = {
   END: 'end'             // 終了時
 };
 
+// 花びらの設定
+const PETALS_CONFIG = {
+  COUNT: 30,            // 花びらの数
+  COLORS: ['#ffcccc', '#ffe6cc', '#fff2cc', '#ccffcc', '#cce6ff', '#e6ccff'], // 花びらの色
+  MIN_SIZE: 10,         // 最小サイズ（px）
+  MAX_SIZE: 20,         // 最大サイズ（px）
+  ANIMATION_DURATION: 4 // アニメーション時間（秒）
+};
+
 const WordCardGame: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -97,6 +107,7 @@ const WordCardGame: React.FC = () => {
   // 各単語のスコアと試行履歴を保存する配列
   const [wordScores, setWordScores] = useState<WordScore[]>([]);
   const [showFinalLoading, setShowFinalLoading] = useState(false);
+  const [showPerfectEffect, setShowPerfectEffect] = useState(false);
   
   // カード内容の参照
   const currentWordRef = useRef(sampleWords[currentIndex]);
@@ -269,45 +280,44 @@ const WordCardGame: React.FC = () => {
       if (currentIndex < sampleWords.length - 1) {
         // フェードアウトがほぼ完了した時点で次のカード内容を準備
         timerRef.current = setTimeout(() => {
-          // 次のカードの内容を先に更新し、完全に非表示になる直前に内容を切り替え
           currentWordRef.current = sampleWords[currentIndex + 1];
-        }, ANIMATION_TIMING.FADE_OUT - 50); // フェードアウト完了直前
+        }, ANIMATION_TIMING.FADE_OUT - 20);
         
         // フェードアウト完了後、インデックス変更、フェードイン開始
         const mainTimer = setTimeout(() => {
-          // インデックスを更新
           setCurrentIndex(prev => prev + 1);
-          // フェードイン開始
           setCardAnimation(CARD_ANIMATION.FADE_IN);
-          // 新しいカードに移動する時だけ評価結果をリセット
           setAssessmentScore(0);
           setShowAssessment(false);
-        }, ANIMATION_TIMING.FADE_OUT); // フェードアウト時間
+        }, ANIMATION_TIMING.FADE_OUT);
         
-        // 複数のタイマーを管理するために配列として扱う
         timerRef.current = [timerRef.current, mainTimer];
       }
     } else if (cardAnimation === CARD_ANIMATION.FADE_IN) {
-      // フェードイン完了後、アニメーションリセット
       timerRef.current = setTimeout(() => {
         setCardAnimation(CARD_ANIMATION.NONE);
-        // 録音開始
         if (gameStarted && !isPaused) {
           setIsRecording(true);
         }
-      }, ANIMATION_TIMING.FADE_IN); // フェードイン時間
+      }, ANIMATION_TIMING.FADE_IN);
     } else if (cardAnimation === CARD_ANIMATION.SUCCESS) {
-      // 成功アニメーション中は評価ロックを維持
       evaluationLockRef.current = true;
       
-      // 成功アニメーション完了後、フェードアウト開始
-      timerRef.current = setTimeout(() => {
-        setCardAnimation(CARD_ANIMATION.FADE_OUT);
-      }, ANIMATION_TIMING.SUCCESS); // 成功アニメーション時間
+      // 最後のカードかどうかで異なるアニメーション遷移を設定
+      if (currentIndex === sampleWords.length - 1) {
+        // 最後のカードの場合は成功アニメーションをスキップして直接フェードアウト
+        setCardAnimation(CARD_ANIMATION.FINAL_FADE_OUT);
+        addLog("最終カード成功、直接フェードアウト開始");
+      } else {
+        // 通常のカードの場合は成功アニメーション後にフェードアウト
+        timerRef.current = setTimeout(() => {
+          setCardAnimation(CARD_ANIMATION.FADE_OUT);
+        }, ANIMATION_TIMING.SUCCESS);
+      }
     } else if (cardAnimation === CARD_ANIMATION.FINAL_FADE_OUT) {
-      // 最終フェードアウト完了後にゲーム終了
       timerRef.current = setTimeout(() => {
         setGameCompleted(true);
+        addLog("ゲーム完了");
       }, ANIMATION_TIMING.FINAL_FADE);
     }
     
@@ -316,11 +326,10 @@ const WordCardGame: React.FC = () => {
       const pendingResult = pendingEvaluationRef.current;
       pendingEvaluationRef.current = null;
       
-      // 少し遅延を入れて評価を処理（アニメーションの後処理が完了するのを待つ）
       setTimeout(() => {
         addLog(`保留中だった評価を処理: ${pendingResult.toFixed(2)}`);
         handlePronunciationResult(pendingResult);
-      }, 100);
+      }, 30); // 50ms→30msに短縮
     }
     
     return () => {
@@ -341,7 +350,7 @@ const WordCardGame: React.FC = () => {
       timerRef.current = setTimeout(() => {
         setIsRecording(true);
         setShowAssessment(false);
-      }, 500);
+      }, 200); // 500ms→200msに短縮
     }
   }, [gameStarted, gameCompleted, isPaused, isRecording, cardAnimation]);
 
@@ -375,7 +384,7 @@ const WordCardGame: React.FC = () => {
                   .catch(e => addLog('カウントダウン音再生: フォールバック失敗'));
               }
             });
-        }, 100);
+        }, 50); // 100ms→50msに短縮
       } catch (error) {
         console.error('カウントダウン音の初期化エラー:', error);
       }
@@ -383,8 +392,6 @@ const WordCardGame: React.FC = () => {
     
     // カウントダウンを開始
     setCountdown(3);
-    
-    // ユーザーのクリックイベントに直結してサウンドを再生
     preloadCountdownSound();
   };
 
@@ -421,19 +428,30 @@ const WordCardGame: React.FC = () => {
     } else {
       // 最後のカードの場合
       addLog("最後のカード完了、フェードアウト開始");
+      setShowHint(false);
+      setShowSuccessEffect(true);
+      setShowAssessment(false);
+      setRecognitionText('');
+      setIsRecording(false);
       
-      // 効果音の再生完了を待ってからフェードアウト開始
+      // 最後のカードの場合は、アニメーションを短くして直接終了画面へ
       setTimeout(() => {
         setCardAnimation(CARD_ANIMATION.FINAL_FADE_OUT);
         addLog("最終フェードアウト開始");
+        
+        // 最終フェードアウト後にゲーム完了
+        setTimeout(() => {
+          setGameCompleted(true);
+          addLog("ゲーム完了");
+        }, ANIMATION_TIMING.FINAL_FADE);
       }, ANIMATION_TIMING.SOUND_COMPLETE);
     }
     
-    // カード移動完了後にロック解除（十分な時間を確保）
+    // カード移動完了後にロック解除
     setTimeout(() => {
       evaluationLockRef.current = false;
       addLog("評価ロック解除");
-    }, 2000);
+    }, 800);
   };
 
   // 評価結果ハンドラ
@@ -450,10 +468,10 @@ const WordCardGame: React.FC = () => {
       return;
     }
     
-    // 多重評価防止（前回の評価から0.75秒以内の場合はスキップ）
+    // 多重評価防止（前回の評価から500ms以内の場合はスキップ）
     const now = Date.now();
-    if (now - lastEvaluationTime < 750) {
-      addLog(`評価をスキップ（前回から${(now - lastEvaluationTime) / 750}秒）`);
+    if (now - lastEvaluationTime < 500) { // 750ms→500msに短縮
+      addLog(`評価をスキップ（前回から${(now - lastEvaluationTime) / 500}秒）`);
       return;
     }
     setLastEvaluationTime(now);
@@ -463,40 +481,31 @@ const WordCardGame: React.FC = () => {
       addLog(`アニメーション中の評価を保留: ${result.toFixed(2)}`);
       pendingEvaluationRef.current = result;
       
-      // 次のフレームで保留評価を処理するタイマーを設定（アニメーション状態に依存しない）
       setTimeout(() => {
-        // アニメーションが終わったかどうか再確認
         if (pendingEvaluationRef.current !== null) {
           const pendingResult = pendingEvaluationRef.current;
           
-          // アニメーションがまだ進行中なら、さらに待機
           if (cardAnimation !== CARD_ANIMATION.NONE) {
             addLog(`アニメーションまだ進行中、評価処理を延期: ${pendingResult.toFixed(2)}`);
             
-            // アニメーションが終わるまで待機するために、より長い時間後に再試行
             setTimeout(() => {
-              // 最終チェック
               if (pendingEvaluationRef.current !== null) {
                 const finalPendingResult = pendingEvaluationRef.current;
                 pendingEvaluationRef.current = null;
                 
                 addLog(`保留中だった評価を強制処理: ${finalPendingResult.toFixed(2)}`);
-                // 評価処理を実行（アニメーション状態を無視）
                 processPronunciationResult(finalPendingResult);
               }
-            }, 1000); // より長い待機時間
+            }, 400); // 1000ms→500msに短縮
             
             return;
           }
           
           pendingEvaluationRef.current = null;
           addLog(`保留中だった評価を処理: ${pendingResult.toFixed(2)}`);
-          // 評価処理を実行
           processPronunciationResult(pendingResult);
         }
-      }, 300);
-      
-      return;
+      }, 150); // 300ms→150msに短縮
     }
     
     // 通常の評価処理
@@ -560,31 +569,31 @@ const WordCardGame: React.FC = () => {
         }
       });
       
-      // 成功時の処理と音の再生（すぐに再生）
+      // 成功時の処理と音の再生
       playSound('SUCCESS');
-      
-      // サクサク感のため、成功アニメーションへの移行を早める
-      timerRef.current = setTimeout(() => {
-        moveToNextCard();
-      }, ANIMATION_TIMING.WAIT_BEFORE_ANIMATION);
+      moveToNextCard();
+
+      // 100点満点の場合、花びら演出を表示
+      if (Math.round(result * 100) === 100) {
+        setShowPerfectEffect(true);
+        setTimeout(() => setShowPerfectEffect(false), PETALS_CONFIG.ANIMATION_DURATION * 1000);
+      }
     } else {
       gameEventRef.current = GAME_EVENT.FAILURE;
       addLog("失敗判定: スコア不十分");
       setShowHint(true);
       
-      // 失敗時の音の再生
-      setTimeout(() => {
+      // 失敗時の音の再生（重複を防ぐため、gameEventRefをチェック）
+      if (gameEventRef.current === GAME_EVENT.FAILURE) {
         playSound('FAILURE');
-      }, 200);
+      }
       
-      // 失敗時は少し待ってから再度録音（スコア表示はそのまま維持）
+      // 失敗時は少し待ってから再度録音
       timerRef.current = setTimeout(() => {
         if (gameStarted && !isPaused) {
           setIsRecording(true);
-          // 失敗時はスコア表示を維持（リセットしない）
-          // setShowAssessment(false); -- この行をコメントアウト
         }
-      }, 1000);
+      }, 300);
       
       // スコアを記録（失敗時）
       setWordScores(prev => {
@@ -676,6 +685,46 @@ const WordCardGame: React.FC = () => {
     addLog(`効果音: ${!isSoundEnabled ? 'ON' : 'OFF'}`);
   };
 
+  // 花びらのスタイルを生成する関数
+  const generatePetalStyle = (index: number) => {
+    const size = Math.random() * (PETALS_CONFIG.MAX_SIZE - PETALS_CONFIG.MIN_SIZE) + PETALS_CONFIG.MIN_SIZE;
+    const color = PETALS_CONFIG.COLORS[Math.floor(Math.random() * PETALS_CONFIG.COLORS.length)];
+    const left = Math.random() * 100;
+    const animationDelay = Math.random() * 2;
+    const animationDuration = Math.random() * 2 + PETALS_CONFIG.ANIMATION_DURATION;
+
+    return {
+      position: 'absolute' as const,
+      width: `${size}px`,
+      height: `${size}px`,
+      backgroundColor: color,
+      borderRadius: '50%',
+      left: `${left}%`,
+      top: '-20px',
+      opacity: 0.8,
+      animation: `fall ${animationDuration}s linear ${animationDelay}s infinite`,
+      transform: `rotate(${Math.random() * 360}deg)`,
+      zIndex: 50
+    };
+  };
+
+  // アニメーションクラスの決定
+  const getAnimationClass = () => {
+    switch (cardAnimation) {
+      case CARD_ANIMATION.SUCCESS:
+        // 最後のカードの場合は成功アニメーションを適用しない
+        return currentIndex === sampleWords.length - 1 ? '' : 'animate-fade-zoom';
+      case CARD_ANIMATION.FADE_OUT:
+        return 'animate-fade-out';
+      case CARD_ANIMATION.FADE_IN:
+        return 'animate-fade-in';
+      case CARD_ANIMATION.FINAL_FADE_OUT:
+        return 'animate-final-fade-out';
+      default:
+        return '';
+    }
+  };
+
   // ゲーム開始前の画面
   if (!gameStarted) {
     return (
@@ -719,6 +768,31 @@ const WordCardGame: React.FC = () => {
           <div className="mb-6">
             <p className="text-xl mb-2">スコア: {score} / {sampleWords.length}</p>
             <p className="text-gray-600 mb-4">正答率: {((score / sampleWords.length) * 100).toFixed(1)}%</p>
+            
+            {/* 平均点の表示を追加 */}
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+              <h3 className="font-bold text-blue-800 mb-2">総合評価</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">全試行の平均点</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {(wordScores.reduce((sum, word) => 
+                      sum + word.attempts.reduce((attemptSum, attempt) => 
+                        attemptSum + attempt.score, 0
+                      ) / word.attempts.length, 0
+                    ) / wordScores.length).toFixed(1)}点
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">最終スコアの平均</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {(wordScores.reduce((sum, word) => 
+                      sum + word.finalScore, 0
+                    ) / wordScores.length).toFixed(1)}点
+                  </p>
+                </div>
+              </div>
+            </div>
             
             {/* 各単語のスコア表示 */}
             <div className="mt-3 border rounded-lg overflow-hidden">
@@ -800,25 +874,22 @@ const WordCardGame: React.FC = () => {
     );
   }
 
-  // アニメーションクラスの決定
-  const getAnimationClass = () => {
-    switch (cardAnimation) {
-      case CARD_ANIMATION.SUCCESS:
-        return 'animate-fade-zoom';
-      case CARD_ANIMATION.FADE_OUT:
-        return 'animate-fade-out';
-      case CARD_ANIMATION.FADE_IN:
-        return 'animate-fade-in';
-      case CARD_ANIMATION.FINAL_FADE_OUT:
-        return 'animate-final-fade-out';
-      default:
-        return '';
-    }
-  };
-
   // ゲームプレイ画面
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 relative">
+    <div className="relative min-h-screen bg-gray-100 py-8">
+      {/* 花びら演出 */}
+      {showPerfectEffect && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {Array.from({ length: PETALS_CONFIG.COUNT }).map((_, index) => (
+            <div
+              key={index}
+              style={generatePetalStyle(index)}
+              className="petal"
+            />
+          ))}
+        </div>
+      )}
+
       {/* 効果音要素 - 表示はされないがHTMLに存在する必要がある */}
       <audio id={SOUND_IDS.SUCCESS} src={SOUND_PATHS.SUCCESS} preload="auto" />
       <audio id={SOUND_IDS.FAILURE} src={SOUND_PATHS.FAILURE} preload="auto" />
@@ -858,20 +929,30 @@ const WordCardGame: React.FC = () => {
       <style jsx>{`
         @keyframes fadeOut {
           from { opacity: 1; transform: translateY(0); }
-          to { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 0; transform: translateY(-5px); }
         }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
+          from { opacity: 0; transform: translateY(5px); }
           to { opacity: 1; transform: translateY(0); }
         }
         @keyframes fadeZoom {
           0% { opacity: 1; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.05); }
+          50% { opacity: 1; transform: scale(1.03); }
           100% { opacity: 1; transform: scale(1); }
         }
         @keyframes finalFadeOut {
           0% { opacity: 1; transform: scale(1); }
-          100% { opacity: 0; transform: scale(0.95); }
+          100% { opacity: 0; }
+        }
+        @keyframes fall {
+          0% {
+            transform: translateY(-20px) rotate(0deg);
+            opacity: 0.8;
+          }
+          100% {
+            transform: translateY(100vh) rotate(360deg);
+            opacity: 0;
+          }
         }
         .animate-fade-out {
           animation: fadeOut 0.2s ease-out forwards;
@@ -884,6 +965,9 @@ const WordCardGame: React.FC = () => {
         }
         .animate-final-fade-out {
           animation: finalFadeOut 0.8s ease-in-out forwards;
+        }
+        .petal {
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
       `}</style>
 
