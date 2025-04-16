@@ -75,10 +75,14 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
 
         // 発音評価の設定
         const pronunciationAssessmentConfig = new sdk.PronunciationAssessmentConfig(
+<<<<<<< HEAD
           referenceText || "",
+=======
+          referenceText || "",  // 原稿読み上げモードの場合は参照テキストを使用
+>>>>>>> feat/script-reading
           sdk.PronunciationAssessmentGradingSystem.HundredMark,
           sdk.PronunciationAssessmentGranularity.Phoneme,
-          true  // 詳細な評価を有効化
+          true
         );
 
         // 音声認識オブジェクトの作成
@@ -99,6 +103,11 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
                 const newText = prev.text + ' ' + (nBest.Display || '');
                 const newWords = [...prev.words, ...(nBest.Words || [])];
                 
+                // ScriptReading用: 単語配列を親に渡す
+                if (onRecognizedWords) {
+                  onRecognizedWords(newWords);
+                }
+
                 // 新しい評価結果を生成
                 const combinedResult = {
                   ...result,
@@ -164,7 +173,7 @@ const SpeechRecognition: React.FC<SpeechRecognitionProps> = ({
         recognizer.current.close();
       }
     };
-  }, []);
+  }, [referenceText]); // referenceTextが変更されたら再初期化
 
   const showToast = (message: string) => {
     setToast(message);
